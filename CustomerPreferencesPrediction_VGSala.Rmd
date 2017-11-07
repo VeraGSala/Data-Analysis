@@ -1,0 +1,479 @@
+---
+title: "Predict customer product preferences"
+subtitle: "A case study for understanding classification decision boundaries"
+author: "Vera Giulia Sala - Ubiqum Code Academy"
+
+output: 
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+---
+
+******
+# Goal of the analysis
+******
+
+The sales team of Blackwell Electronics engaged a market research firm to conduct a survey of existing customers. The main objective of the survey is to find out which of the two brands of computers customers prefer among Acer and Sony. Together with the brand preference of the users, the survey collects answers to several demografic questions (age, salary, car, etc.).  
+For a certain amount of respondents the brand preference question was not recorded, so the idea of the sale team is to try to predict it starting from the responses to the demografic questions.
+
+******
+# Dataset
+******
+
+The dataset includes 10,000 fully-answered surveys and 5,000 incomplete surveys (with brand preference missing), answering the following questions:
+
+1) What is your yearly salary, not including bonuses?			
+Respondents enter numeric value			
+			
+2) What is your age?			
+Respondents enter numeric value			
+			
+3) What is the highest level of education you have obtained?			
+Respondents select from the following 5 choices:			
+Value 	Description		
+0	Less than High School Degree		
+1	High School Degree		
+2	Some College		
+3	4-Year College Degree		
+4	Master's, Doctoral or Professional Degree		
+			
+4) What is the make of your primary car?			
+Respondents select from the following 20 choices:			
+Value 	Description		
+1	BMW		
+2	Buick		
+3	Cadillac		
+4	Chevrolet		
+5	Chrysler		
+6	Dodge		
+7	Ford		
+8	Honda		
+9	Hyundai		
+10	Jeep		
+11	Kia		
+12	Lincoln		
+13	Mazda		
+14	Mercedes Benz		
+15	Mitsubishi		
+16	Nissan		
+17	Ram		
+18	Subaru		
+19	Toyota		
+20	None of the above		
+			
+5) What is your zip code?			
+Respondents enter zip code, which is captured as 1 of the following 9 regions in the U.S.			
+Value	Region		
+0	New England		
+1	Mid-Atlantic		
+2	East North Central		
+3	West North Central		
+4	South Atlantic		
+5	East South Central		
+6	West South Central		
+7	Mountain		
+8	Pacific		
+			
+6) What amount of credit is available to you?			
+Respondents enter numeric value			
+			
+7) Which brand of computers do you prefer?			
+Respondents select from the following 2 choices:			
+Value 	Description		
+0	Acer		
+1	Sony
+
+
+
+******
+# Preprocessing, exploratory analysis of data
+******
+
+We perform a first exploration of the fully-answered survey dataset. We check the data quality (no missing values, no repeated rows) and we visualize the distribution of the interviewed users along the different variables. The exploratory analysis gives us the following insights:  
+
+> 62% of the interviewed customers prefer Sony, while 38% prefer Acer.
+
+> The distribution of the interviewed users along the demografic variables is flat for all the variables: it means that the survey has been performed with a stratified sample. This choice allows analyzing with good accuracy all users segments.
+
+> From the exploratory analysis, it seems that only the variable "salary" has a correlation with the brand preference.
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+library(readxl)
+library(reshape2)
+library(ggplot2)
+library(arules)
+library(caret)
+library(rpart.plot)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati <- read_excel("Survey_Key_and_Complete_Responses_excel.xlsx",sheet =2)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+str(dati)
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(paste("The number of NAs is ", (sum(is.na(dati)))))
+print(paste("The number of duplicated rows is ",sum(duplicated(dati))))
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 5, fig.width = 7}
+perc1 <- round(table(dati$brand)[1]/sum(table(dati$brand))*100,0)
+perc2 <- round(table(dati$brand)[2]/sum(table(dati$brand))*100,0)
+
+ggplot(dati,aes(x=as.factor(brand),fill=as.factor(brand)))+geom_bar()+xlab("Brand")+
+scale_fill_discrete(name="brand",labels = c("Acer", "Sony"))+
+geom_text(aes(1, 3000, label=paste(perc1,"%")))+
+geom_text(aes(2, 5000, label=paste(perc2,"%")))+
+scale_x_discrete(labels=c("0" = "Acer","1" = "Sony"))+
+ggtitle("Survey brand preferences")+ theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 9}
+aaa <- melt(dati,id.vars = c("brand"))
+ggplot(aaa,aes(x=value,fill=as.factor(brand)))+geom_histogram(col="gray")+facet_wrap(~ variable,scales = "free")+
+scale_fill_discrete(name="brand",labels = c("Acer", "Sony"))+
+ggtitle("Distribution of the interviewed users, divided by brand preference")+ theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+We convert "car", "zipcode", "brand" to categorical variables.
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 9}
+datip <- dati
+datip$zipcode <- as.factor(datip$zipcode)
+datip$brand <- as.factor(datip$brand)
+datip$car <- as.factor(datip$car)
+
+```
+
+******
+# Brand preference prediction
+******
+
+We try to predict the brand preference starting from the answers to the demografic questions. 
+We define a train (75%) and test (25%) set, stratified on the brand preference variable. From the train set we extract a smaller stratified sample (3002 instances), that we use to train different models.
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 9}
+
+set.seed(123)
+indexT <- createDataPartition(datip$brand, p = .75, list = FALSE)
+train <- datip[indexT,]
+test <- datip[-indexT,]
+print(paste("# instances in train set: ",dim(train)[1]))
+print(paste("# instances in test set: ",dim(test)[1]))
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+
+iii <- createDataPartition(train$brand, p = .40, list = FALSE)
+tt <- train[iii,]
+print(paste("# instances in subset of train set: ",dim(tt)[1]))
+
+```
+******
+## Feature selection with random forest
+******
+We use 3-fold cross validation (repeated x3) to train a random forest model and determine which features are more relevant for brand preference predicition.  
+
+> There are two main relavant features for brand preference prediction: "salary" and "age"
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitrf <- train(brand ~ .  , data = tt, method = "rf",  tuneLength = 5, trControl=fitControl)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(fitrf)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 6, fig.width = 9}
+varImpPlot(fitrf$finalModel,type=2, main="Variables Importance")
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 7}
+ggplot(tt, aes(x=salary, y=age))+geom_point(aes(col=brand),size=2, shape=15)+
+scale_color_manual(labels=c("0"="Acer","1"="Sony"), values = c( "#545454","#bdbdbd"))+ggtitle("Training data")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+> We see a clear separation of the brand preference in the salary - age space of variables.
+
+
+******
+## Brand preference classification with different models: study of the classification boundaries
+******
+We use 3-fold cross validation (repeated x3) on the same train subsample used before to train different models with just two predictors (salary and age). For each model we plot the predicted classification boundaries and the training data on top of it.
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitrf2 <- train(brand ~ salary + age  , data = tt, method = "rf",  tuneLength = 5, trControl=fitControl)
+print(fitrf2)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fitrf2,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("Random forest classification boundaries")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitknn2 <- train(brand ~ salary + age  , data = tt, method = "knn",  tuneLength = 8, trControl=fitControl)
+print(fitknn2)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fitknn2,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("k-nn classification boundaries: no-scaled data")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitknn3 <- train(brand ~ salary + age  , data = tt, method = "knn",preProcess=c("scale","center") , tuneLength = 8, trControl=fitControl)
+print(fitknn3)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fitknn3,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("k-nn classification boundaries: scaled data")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitsvm2 <- train(brand ~ salary + age  , data = tt, method = "svmRadial" , tuneLength = 8, trControl=fitControl)
+print(fitsvm2)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fitsvm2,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("SVM classification boundaries")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 3)
+fitC50 <- train(brand ~ salary + age  , data = tt, method = "C5.0" , tuneLength = 8, trControl=fitControl)
+print(fitC50)
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fitC50,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("C5.0 classification boundaries")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+
+
+> All the classification models we used are able to predict the brand preference with a quite good accuracy (~ 0.9). We see that the accuracy of prediction is 100% away from the classification boundaries. At the boundaries the two classes are mixed so no model can predict correctly. 
+
+> The classification boundary plots give us insights on how the different models operate to build the classification boundary. 
+
+> The best performing model is the SVM, with an accuracy ~ 0.92.
+
+
+
+
+******
+## Brand preference classification with full dataset  
+******
+We use the SMV model trained on the full training set to make predictions on the test set.
+
+> The chosen model can classify the "brand preference" on the test set with an accuracy of 92%.
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(123)
+fitControl <- trainControl(method = "none")
+fit_tot <- train(brand ~ salary + age  , data = train, method = "svmRadial" , tuneLength = 1, tuneGrid=expand.grid(.sigma = 1.157604, .C = 32), trControl=fitControl)
+print(fit_tot)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+
+predictions <- predict(fit_tot, test)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+
+postResample(predictions, test$brand)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fit_tot,grid)
+grid$pred <- pred_frid
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+geom_point(data=test,aes(x=salary,y=age,col=brand),size=1)+
+scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+ ggtitle("Test set, SVM classification boundaries")+ theme(plot.title = element_text(hjust = 0.5))
+        
+
+```
+
+
+******
+# Brand preference predictions for the incomplete surveys 
+******
+
+We use the trained model to predict the brand preferences of the 5,000 incomplete surveys. 
+Note that the distribution of interviewed users along the demografic variables and the distribution of data points in the "salary" - "age" space is very similar to what we found for the fully-answered surveys. So we can safely predict on the new dataset. Just the first 20 predictions are shown below.
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+
+dati_new <- read.csv("SurveyIncomplete.csv")
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 9}
+bbb <- melt(dati_new[(names(dati_new) != "brand")])
+ggplot(bbb,aes(x=value))+geom_histogram(col="gray")+facet_wrap(~ variable,scales = "free")+
+ggtitle("Distributions of the interviewed users for the incomplete surveys")+ theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=seq(0,160000,1000), y=0:100)
+names(grid) <- c("salary","age")
+pred_frid <- predict(fit_tot,grid)
+grid$pred <- pred_frid
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+ggplot(grid, aes(salary, age)) + geom_tile(aes(fill = pred)) +
+  xlab("Salary") + ylab("Age") +
+scale_fill_discrete(name="Brand predictions",labels=c("0"="Acer","1"="Sony"))+
+geom_point(data=dati_new,aes(x=salary,y=age),size=1, shape = 4)+ggtitle("Incomplete surveys")+
+theme(plot.title = element_text(hjust = 0.5))
+        
+
+#geom_point(data=tt,aes(x=salary,y=age,col=brand),size=1)+
+#scale_color_manual(values = c("red", "blue"),name="Brand",labels=c("0"="Acer","1"="Sony"))+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+brand_pred <- predict(fit_tot, dati_new)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_new$brand <- brand_pred
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+head(dati_new,20)
+
+```
+
+******
+# Conclusions
+******
+
+**Overall customers brand preference**
+
+> Among the interviewed customers the brand preferences are: 62% prefer Sony, 38% prefer Acer.  
+
+> Nevertheless we should consider that these pecentages relate to the stratified sample that has been chosen for conducting the survey, and therefore are not representative of the overall brand preference of customers. To determine the overall brand preference we should cross our study with the customers population distribution.  
+
+**Brand preference prediction**
+
+> We were able to predict the brand preference of customers starting from the answers to the demografic questions with a high accuracy ( ~ 92%). 
+
+> This information doesn't give more insight in determining the overall customers brand preference, but can be used to target new customers that didn't participate to the survey.
+
+> Our analysis showed that just two demografic data ("salary" and "age") are sufficient for defining the customer brand preference. This information could be used to simplify the survey, making all the process less demanding and more efficient for the customers and the company.
+
+
+
+
+

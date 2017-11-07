@@ -1,0 +1,972 @@
+---
+title: "Predict profitability of new products"
+subtitle: "A case study for understanding regression models"
+author: "Vera Giulia Sala - Ubiqum Code Academy"
+
+output: 
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+---
+
+******
+# Goal of the analysis
+******
+
+The sales team of Blackwell Electronics is considering adding some new products to Blackwell's product mix. They have shortlisted 17 that fit Blackwell's business strategy, but now they need help narrowing the list down to five, corresponding to the highest profitable ones. To that end, the goal of the analysis is to build a predictive model, based on the data of the products that are already on the market, that determines the profitabiliy of a product based on a certain number of product attributes. That model will be used to predict the profitability of new products and determine the most rentable one.   
+The sales team is also interested in how specific product types perform against each other, i.e. if some product types are more likely to have a higher volume of sales (especially among PC, Laptops, Netbooks and Smartphones). 
+
+******
+# Dataset
+******
+
+The "existing products" dataset contains the existing Blackwell product mix, consisting of 80 products. For each product 18 features are recorded:
+
+- Product ID: 'ProductNum'
+
+- Product type: 'ProductType'
+
+- Quality attributes: 'x5StarReviews', 'x4StarReviews', 'x3StarReviews', 'x2StarReviews' 'x1StarReviews',   'PositiveServiceReview', 'NegativeServiceReview', 'Wouldconsumerrecommendproduct', 'BestSellersRank'
+
+- Physical attributes: 'ShippingWeight', 'ProductDepth', 'ProductWidth', 'ProductHeight'
+
+- Profit margin: 'Profitmargin'
+
+- Volume of sales: 'Volume'
+
+The "new products" dataset contains 24 new products, for which we want to predict the volume of sales.
+
+
+
+******
+# Preprocessing and exploratory analysis of data
+******
+
+We perform a first exploration of the existing and new products datasets. We check the data quality (missing values, repeated rows), check the distribution of data and remove ouliers. 
+
+******
+## First exploration of data
+******
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+library(reshape2)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(dplyr)
+library(knitr)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- read.csv("existingproductattributes2017.csv")
+dati_new <- read.csv("newproductattributes2017.csv")
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+str(dati_ex)
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+a <- as.data.frame(table(dati_ex$ProductType))
+b <- as.data.frame(table(dati_new$ProductType))
+ggplot(a,aes(x=Var1,y=Freq))+geom_col(fill="gray")+geom_col(data=b,aes(x=Var1,y=Freq),fill="red",alpha=0.5)+ theme(axis.text.x=element_text(angle=60,hjust=1)) + xlab("")+
+geom_rect(xmin=8, xmax=8.3, ymin=20, ymax=21, color="red",fill="red",alpha=0.5)+
+geom_rect(xmin=8, xmax=8.3, ymin=18, ymax=19, color="gray",fill="gray",alpha=0.5)+
+annotate("text", x = 9.5, y = 20.6, label = "New products")+
+annotate("text", x = 9.5, y = 18.6, label = "Ex. products")
+
+```
+
+
+******
+## Missing values: remove BestSellersRank attribute
+******
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(paste("The number of NAs in the existing dataset is ", (sum(is.na(dati_ex)))))
+print(paste("NAs from the BestSellerRank attribute", (sum(is.na(dati_ex$BestSellersRank)))))
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- dati_ex[colnames(dati_ex) != "BestSellersRank"]
+dati_new <- dati_new[colnames(dati_new) != "BestSellersRank"]
+```
+
+******
+## Outliers
+******
+We use histograms and scatter plots to identify and remove outliers.
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 10}
+options(repr.plot.width=15, repr.plot.height=3)
+p1 <- ggplot(dati_ex,aes(x=Volume))+ geom_histogram()
+p2 <- ggplot(dati_ex, aes(x=x4StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+           geom_point(data=dati_ex[which(dati_ex$Volume > 6000),],col="blue",size=3)+ geom_point(data=dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews > 40),],col="blue",size=3)+ggtitle("With outliers")
+p3 <- ggplot(dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews < 40),], aes(x=x4StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+ggtitle("Outliers removed")
+multiplot(p1, p2, p3, cols=3)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+outliers <- dati_ex[which(dati_ex$Volume > 6000 | dati_ex$x2StarReviews > 40 | dati_ex$NegativeServiceReview > 40 | dati_ex$PositiveServiceReview >200),]
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews < 40 & dati_ex$NegativeServiceReview < 40 & dati_ex$PositiveServiceReview <200),]
+
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dim(dati_ex)
+```
+
+******
+## Attributes type: categorical to dummy variables
+******
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+newDataframe <- dummyVars(" ~ .", data = dati_ex)
+dati_ex_d <- data.frame(predict(newDataframe, newdata = dati_ex))
+
+```
+
+******
+# Feature Selection
+******
+
+We use feature selection to determine the set of variables that are more relevant for volume prediction. This process follows three steps:
+
+- elimination of "bad" features
+- elimination of collinear features
+- feature selection using random forest prediction (feature importance)
+
+
+
+******
+## Removing "bad" features: x5StarReviews
+******
+
+From the features correlation matrix, we find that "x5StarReviews" is 100% correlated with the volume (the dependent variable we are trying to predict). The explicit linear relation is shown in the linear model below.
+We deduce that there has been an error in the data recollection. We eliminate the "x5StarReviews" variable.
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 8, fig.align="left"}
+options(repr.plot.width=10, repr.plot.height=10)
+M <- cor(dati_ex_d[!(names(dati_ex_d) %in% c("ProductType"))])
+corrplot(M, method="ellipse",order="hclust",tl.cex=0.5)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide"}
+linmod5 <- lm(Volume ~ x5StarReviews, dati_ex_d)
+
+```
+
+
+
+```{r ,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 3, fig.width = 5, fig.align="left"}
+
+linmod5 <- lm(Volume ~ x5StarReviews, dati_ex_d)
+ggplot(dati_ex_d, aes(x=x5StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+
+annotate("text", x = 150, y = 1700, label = "Volume = 4 * x5StarReviews", col='black')
+        
+```
+
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide",out.extra='style="float:none;"'}
+dati_ex_d <- dati_ex_d[colnames(dati_ex_d) != "x5StarReviews"]
+
+```
+
+******
+## Remove collinear features
+******
+
+We remove independent variables that are highly collinear, i.e.  having a high correlation coefficient. Specifically, "x3StarReviews" is highly correlated with "x4StarReviews". We remove "x3StarReviews", being the variable with the lowest correlation with the dependent variable (Volume).
+
+
+```{r, eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 8, fig.align="left"}
+M <- cor(dati_ex[!(names(dati_ex) %in% c("ProductType","ProductNum","x5StarReviews"))])
+corrplot(M, method="number",order="hclust",tl.cex=0.5,number.cex=0.7)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide",out.extra='style="float:none;"'}
+dati_ex_d <- dati_ex_d[colnames(dati_ex_d) != "x3StarReviews"]
+
+```
+
+******
+## Feature selection with random forest
+******
+
+We train a random forest model on the full dataset (all features included). From the variables importance given as an output from the model, we determine the most relevant features. 
+
+> just two variables are relevant: x4StarReviews, PositiveServiceReview
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrf <- train(Volume ~ ., dati_ex_d[names(dati_ex_d) != "ProductNum"], method = "rf", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modrf)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 6, fig.width = 9}
+varImpPlot(modrf$finalModel, main="Variables Importance")
+```
+
+> From our analysis we see that we can use just two variables (x4StarReviews, PositiveServiceReview) for volume prediction. The product type seems irrelevant for the prediction.
+
+******
+# Volume predictions: study of how different models predict
+******
+
+We train different models using just the two features selected before (x4StarReviews, PositiveServiceReview). We use 3-fold cross-validation (repeated x3) on the full existing products dataset. For each model we plot the predicted values and compare it with the real values. We plot the relative prediction error. 
+
+> **Random forest** 
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrf_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "rf", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modrf_2)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-100:130)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modrf_2,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+a1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 1800),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 1800),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 20, y = 120, label ='atop(bold("random forest, R2=0.90, RMSE=149"))', parse = TRUE)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modrf_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+a2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(a1,a2, cols = 2)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+pred <- as.data.frame(dati_ex_d$Volume)
+names(pred) <- "Volume"
+pred$pred_vol <- predict(modrf_2,dati_ex_d)
+pred$err_rel <- (predict(modrf_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+pred[pred$err_rel > 80,]
+
+```
+
+
+> **k-nn**
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,  results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modknn_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "knn", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modknn_2)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-100:130)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modknn_2,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+b1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 1800),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 1800),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 0, y = 120, label ='atop(bold( "k-nn, R2=0.88, RMSE=212"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modknn_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+b2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(b1,b2,cols=2)
+
+```
+
+> **Linear model**
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modlm_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "lm", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modlm_2)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-20:90)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modlm_2,grid)
+grid$pred <- w
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+c1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(-1200, 3000),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(-1200, 3000),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 20, y = 85, label = 'atop(bold( "linear model, R2=0.87, RMSE=180"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modlm_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+c2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(c1,c2,cols=2)
+
+```
+
+> **Decision tree M5**
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modm5_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "M5", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modm5_2)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-20:90)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modm5_2,grid)
+grid$pred <- w
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+d1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(-600, 2000),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(-600, 2000),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 0, y = 85, label = 'atop(bold("M5, R2=0.89, RMSE=152"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modm5_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+d2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(d1,d2,cols=2)
+
+```
+
+> **Decision tree rpart **
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrpart_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "rpart", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modrpart_2)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-100:130)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modrpart_2,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+e1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 1800),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 1800),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 0, y = 120, label =  'atop(bold("rpart, R2=0.78, RMSE=218"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modrpart_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+e2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(e1,e2,cols=2)
+
+```
+
+> **Support Vector Machine (SVM) **
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modsvm_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "svmRadial", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modsvm_2)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-100:130)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modsvm_2,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+f1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 1800),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 1800),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 0, y = 120, label ='atop(bold( "svm, R2=0.82, RMSE=265"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modsvm_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+f2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(f1,f2,cols=2)
+
+```
+
+> **Gradient Boosting Machine (gbm)**
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modgbm_2 <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_ex_d, method = "gbm", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+
+```
+
+```{r,eval=FALSE,echo=FALSE, warning=FALSE, message=FALSE}
+print(modgbm_2)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-50:150, y=-100:130)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modgbm_2,grid)
+grid$pred <- w
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+g1 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 1800),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 1800),colours = terrain.colors(10))+
+  geom_point(data=dati_ex_d,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 0, y = 120, label = 'atop(bold("gbm, R2=0.76, RMSE=324"))', parse = TRUE)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc <- (predict(modgbm_2,dati_ex_d) - dati_ex_d$Volume)/dati_ex_d$Volume*100
+g2 <- ggplot(dati_ex_d,aes(x=Volume, y=abc))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 3)
+
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(g1,g2,cols=2)
+
+```
+
+******
+## Predictive models: train - test 
+******
+
+We train and evaluate the same models trained before using a train- test splitting of the data. This is done just as a check for what we found before.  
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(902)
+train_index <- createDataPartition(dati_ex_d$Volume,p=0.7, list=FALSE, times =1)
+train <- dati_ex_d[train_index,c("Volume","PositiveServiceReview","x4StarReviews")]
+test <- dati_ex_d[-train_index,c("Volume","PositiveServiceReview","x4StarReviews")]
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+
+set.seed(400)
+ctrl <- trainControl(method="none") 
+m_rf <- train(Volume ~ ., train, method = "rf", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.mtry = 2))
+m_knn <- train(Volume ~ ., train, method = "knn", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.k = 5))
+m_lm <- train(Volume ~ ., train, method = "lm", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.intercept=TRUE))
+m_m5 <- train(Volume ~ ., train, method = "M5", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.pruned = 'Yes', .smoothed = 'No', .rules = 'Yes'))
+m_rpart <- train(Volume ~ ., train, method = "rpart", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.cp = 0))
+m_svm <- train(Volume ~ ., train, method = "svmRadial", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.sigma = 6.827171, .C = 2))
+m_gbm <- train(Volume ~ ., train, method = "gbm", trControl = ctrl, tuneLength =1,tuneGrid = data.frame(.n.trees = 500, .interaction.depth = 6, .shrinkage = 0.1, .n.minobsinnode = 10.))
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+test$rf <- predict(m_rf,test)
+test$knn <- predict(m_knn,test)
+test$lm <- predict(m_lm,test)
+test$m5 <- predict(m_m5,test)
+test$rpart <- predict(m_rpart,test)
+test$svm <- predict(m_svm,test)
+test$gbm <- predict(m_gbm,test)
+
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+rel_err <- (test[,4:10] - test[,"Volume"])/test[,"Volume"]*100
+rel_err$Volume <- test$Volume
+```
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 10}
+ddd <- melt(rel_err, id.vars="Volume")
+p1 <- ggplot(ddd, aes(x=Volume,y=value, col=variable))+ geom_point()+geom_line(size=1)+ylab("relative error %")+scale_color_discrete(name="model")
+p2 <- ggplot(ddd[!(ddd$variable %in% c("svm","gbm","rpart")),], aes(x=Volume,y=value, col=variable))+ geom_point(size=4)+geom_line(size=0.5)+geom_hline(yintercept=50)+geom_hline(yintercept=-50)+geom_hline(yintercept=0,col="red",size=1, linetype="dotted")+ylab("relative error %")+scale_color_discrete(name="model")+ annotate("text", x = 1000, y = 65, label = "50%")+ annotate("text", x = 1000, y = -65, label = "-50%")
+multiplot(p1, p2, cols=2)
+
+```
+
+
+```{r,eval=FALSE,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 7}
+rel_err$cat <- dati_ex[-train_index,c("ProductType")]
+ggplot(rel_err, aes(x=Volume,y=rf, col=cat))+geom_hline(yintercept=50)+geom_hline(yintercept=-50)+geom_hline(yintercept=0,col="red",size=1, linetype="dotted")+ geom_point(size=3)+ylab("relative error %") + ggtitle("Predictions with random forest") 
+
+```
+
+******
+## Predictions with reduced variable range: zone2
+******
+
+We try to improve the accuracy of predictions, reducing the range for independent variables (zone2). 
+
+> We realize that, while the RMSE is reduced (reasonably, since we are reducing the range of volumes), the relative error is not substantially improving.
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 5, fig.width = 10}
+pp1 <- ggplot(data=dati_ex,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=2) +
+  scale_colour_gradientn(colours = terrain.colors(10))+ geom_hline(yintercept = 20, size=0.5)+
+  annotate("text", x = 70, y = 70, label = 'atop(bold("ZONE1"))', parse = TRUE)+annotate("text", x = 70, y = 0, label = 'atop(bold("ZONE2"))', parse = TRUE)
+pp2 <- ggplot(data= outliers,aes(x=x4StarReviews,y=PositiveServiceReview))+geom_point(size=2) +
+geom_point(data=dati_ex,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=2)+
+  scale_colour_gradientn(colours = terrain.colors(10))+annotate("text", x = 100, y = 510, label = 'atop(bold("OUTLIERS"))', parse = TRUE)
+multiplot(pp2,pp1, cols = 2)
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+outliers[outliers$ProductType != "ExtendedWarranty",c("ProductNum","Price","x4StarReviews","PositiveServiceReview","Volume")]
+
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_red <- dati_ex_d[which(dati_ex_d$PositiveServiceReview < 20  ),]
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dim(dati_red)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+q1 <- ggplot(dati_red,aes(x=x4StarReviews,y=PositiveServiceReview, col=Volume))+geom_point(size=3)+
+        scale_colour_gradientn(colours = terrain.colors(10))
+```
+
+
+ 
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE,  results='hide'}
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrf_red <- train(Volume ~ ., dati_red[names(dati_red) != "ProductNum"], method = "rf", trControl = ctrl, tuneLength =10) 
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+print(modrf_red)
+```
+```{r,eval=FALSE,echo=FALSE, warning=FALSE, message=FALSE}
+varImpPlot(modrf_red$finalModel)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrf_red <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_red, method = "rf", metric="MAE", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+print(modrf_red)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-20:90, y=-10:20)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modrf_red,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+q2 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 900),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 900),colours = terrain.colors(10))+
+  geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 20, y = 18, label =  'atop(bold("random forest, R2=0.84, RMSE=98"))', parse = TRUE)
+```
+
+
+
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modknn_red <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_red, method = "knn", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+print(modknn_red)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-20:90, y=-10:20)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modknn_red,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+ q3 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(0, 900),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(0, 900),colours = terrain.colors(10))+
+  geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 10, y = 18, label =  'atop(bold("knn, R2=0.81, RMSE=100"))', parse = TRUE)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modlm_red <- train(Volume ~ x4StarReviews + PositiveServiceReview, dati_red, method = "lm", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+summary(modlm_red)
+print(modlm_red)
+```
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE , results='hide'}
+print(modlm_red)
+```
+
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+grid <- expand.grid(x=-5:90, y=-2:18)
+names(grid) <- c("x4StarReviews","PositiveServiceReview")
+w <- predict(modlm_red,grid)
+grid$pred <- w
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+ q4 <- ggplot(grid, aes(x4StarReviews, PositiveServiceReview)) + geom_tile(aes(fill = pred)) +
+  xlab("4 Star Reviews") + ylab("Positive Service Review") +
+  scale_fill_gradientn(name="Volume Prediction",limits = c(-70, 900),colours = terrain.colors(10))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))+geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume),size=3)+
+  scale_color_gradientn(limits = c(-70, 900),colours = terrain.colors(10))+
+  geom_point(data=dati_red,aes(x=x4StarReviews,y=PositiveServiceReview),shape=21,size=3,stroke=0.5,col="black",alpha=0.2)+
+  annotate("text", x = 40, y = 17, label =  'atop(bold("linear model, R2=0.86, RMSE=92" ))', parse = TRUE)+
+  annotate("text", x = 43, y = 16, label =  'atop(bold("-28 + 5*x4StarReviews + 24*PositiveServiceReview "))', parse = TRUE)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide', fig.height = 12, fig.width = 12}
+multiplot(q1, q2, q3, q4 , cols = 2)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc1 <- (predict(modrf_red,dati_red) - dati_red$Volume)/dati_red$Volume*100
+qq1 <- ggplot(dati_red,aes(x=Volume, y=abc1))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+ggtitle("random forest")
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc2 <- (predict(modknn_red,dati_red) - dati_red$Volume)/dati_red$Volume*100
+qq2 <- ggplot(dati_red,aes(x=Volume, y=abc2))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+ggtitle("k-nn")
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 4}
+abc3 <- (predict(modlm_red,dati_red) - dati_red$Volume)/dati_red$Volume*100
+qq3 <- ggplot(dati_red,aes(x=Volume, y=abc3))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+ggtitle("linear model")
+
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 5, fig.width = 12}
+multiplot(qq1,qq2, qq3, cols=3)
+
+```
+
+******
+## Predictions with just one independent variable: PositiveServiceReview
+******
+
+We can predict zone2 with more or less the same accuracy using just one independent variable:  PositiveServiceReview.
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide', fig.height = 5, fig.width = 7}
+mmm <-  lm(Volume ~  0 + I(PositiveServiceReview^2) , dati_ex_d[dati_ex_d$PositiveServiceReview < 20 & dati_ex_d$PositiveServiceReview > 0,])
+summary(mmm)
+
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, results='hide', fig.height = 5, fig.width = 7}
+h1 <- ggplot(dati_red,aes(x=PositiveServiceReview, y=Volume))+geom_point()+ geom_line(aes(x=PositiveServiceReview, y=predict(mmm,dati_red)), col='red',size=1)
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 7}
+abc1 <- (predict(mmm,dati_red) - dati_red$Volume)/dati_red$Volume*100
+h2 <- ggplot(dati_red,aes(x=Volume, y=abc1))+geom_point()+ylab("relative training error (%)")+geom_hline(yintercept = 50, col='red')+
+geom_hline(yintercept = -50, col='red')+annotate("text", x = 1000, y = 65, label = "50%", col='red')+ annotate("text", x = 1000, y = -65, label = "-50%", col='red')+coord_fixed(ratio = 2)
+
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, fig.height = 6, fig.width = 12}
+multiplot(h1, h2, cols = 2)
+```
+
+
+
+
+
+******
+# New products volume predictions
+******
+
+> We chose as best model, the random forest trained on the full variable space (x4StarReviews, PositiveServiceReview). We use this model to predict the volume of sales for the new products.
+
+```{r,eval=FALSE,echo=FALSE, warning=FALSE, message=FALSE}
+ ggplot(data=dati_ex,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=3) +
+  scale_colour_gradientn(colours = terrain.colors(10))+ geom_hline(yintercept = 20, size=0.5)+ylim(0,65)+xlim(0,300)+
+        geom_point(data=dati_new, aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume), col="black", shape=4, size=3)+
+        geom_point(data=dati_new[dati_new$ProductType %in% c("Laptop","Netbook","Smartphone","PC"),], aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume), col="red", shape=4, size=5)
+
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_new$Volume <-  predict(modrf_2,dati_new[c("x4StarReviews","PositiveServiceReview","Volume")])
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, size="small"}
+
+yyy <- dati_new[c("ProductType","ProductNum","Price","x4StarReviews","PositiveServiceReview","ProfitMargin","Volume")]
+yyy$TotProfit <- round(yyy$Volume*yyy$ProfitMargin*yyy$Price,0)
+yyy$Volume <- round(yyy$Volume,0)
+kable(yyy[order(-yyy$TotProfit),])
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+ggplot(data=dati_ex,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=3)+
+geom_point(data=dati_new, aes(x=x4StarReviews,y=PositiveServiceReview,fill=Volume),shape=23,col="black", size=5)+
+ scale_colour_gradientn(colours = terrain.colors(10), limits = c(0, 2000))+
+scale_fill_gradientn(limits = c(0, 2000), colours = terrain.colors(10))+ggtitle("Comparison new (rhombus) - existing products")+
+annotate("text", x = 220, y = 67, label = "gameconsole-307", col='black')+
+annotate("text", x = 45, y = 35, label = "tablet-186", col='black')+
+annotate("text", x = 50, y = 10, label = "PC-171", col='black')+
+annotate("text", x = 390, y = 90, label = "tablet-187", col='black')+
+annotate("text", x = 165, y = 27, label = "netbook-180", col='black')
+
+
+
+```
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+ggplot(data=dati_ex,aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=3)+
+geom_point(data=dati_new, aes(x=x4StarReviews,y=PositiveServiceReview,fill=Volume),shape=23,col="black", size=5)+
+ scale_colour_gradientn(colours = terrain.colors(10), limits = c(0, 2500))+
+scale_fill_gradientn(limits = c(0, 2500), colours = terrain.colors(10))+ggtitle("Comparison new (rhombus) - existing products (outliers: triangles)")+ 
+geom_point(data= outliers,aes(x=x4StarReviews,y=PositiveServiceReview, col=Volume),shape=17, size=3)+
+annotate("text", x = 340, y = 50, label ="Vol=7036", col='black') +
+annotate("text", x = 400, y = 510, label ="Vol=11204", col='black')
+
+
+
+```
+
+******
+## Predictions for the categories: "Laptop","PC","Netbook","Smartphone"
+******
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+
+nnn<- dati_new[dati_new$ProductType %in% c("Laptop","PC","Netbook","Smartphone"),c("ProductType","ProductNum","Price","x4StarReviews","PositiveServiceReview","ProfitMargin","Volume")]
+nnn$TotProfit <- round(nnn$Volume*nnn$ProfitMargin*nnn$Price,0)
+nnn$Volume <- round(nnn$Volume,0)
+kable(nnn[order(-nnn$TotProfit),])
+
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+ ggplot(data=dati_ex[dati_ex$PositiveServiceReview < 20, ],aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=3) +xlim(0,120)+ geom_point(data=dati_new[dati_new$ProductType %in% c("Laptop","Netbook","Smartphone","PC","Volume") & dati_new$PositiveServiceReview < 20,], aes(x=x4StarReviews,y=PositiveServiceReview,fill=Volume),shape=23,col="black", size=5)+
+ scale_colour_gradientn(colours = terrain.colors(10), limits = c(0, 1000))+  scale_fill_gradientn(colours = terrain.colors(10),limits = c(0, 1000))+ggtitle("Comparison new (rhombus) - existing products")+
+annotate("text", x = 36, y = 11.5, label = "pc-171", col='black')+
+annotate("text", x = 10, y = 8, label = "pc-172", col='black')+
+annotate("text", x = 11, y = 10, label = "laptop-173", col='black')+
+annotate("text", x = 4, y = 3, label = "laptop-175", col='black')
+
+
+```
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 6, fig.width = 12}
+ ggplot(data=dati_ex[dati_ex$ProductType %in% c("Laptop","Netbook","Smartphone","PC","Volume"), ],aes(x=x4StarReviews,y=PositiveServiceReview,col=Volume))+geom_point(size=3) +xlim(0,120)+ geom_point(data=dati_new[dati_new$ProductType %in% c("Laptop","Netbook","Smartphone","PC","Volume") ,], aes(x=x4StarReviews,y=PositiveServiceReview,fill=Volume),shape=23,col="black", size=5)+
+ scale_colour_gradientn(colours = terrain.colors(10), limits = c(0, 1000))+  scale_fill_gradientn(colours = terrain.colors(10),limits = c(0, 1000))+ggtitle("Comparison new (rhombus)- existing products divided by category")+facet_grid(~ ProductType)
+
+```
+
+******
+# Conclusions
+******
+
+> From our analysis it seems that there is no clear relationship between the product type and the volume of sales. 
+
+> The volume of sales seems to be dependent just on two variables: "4StarReviews", "PositiveServiceReview" that characterize the product. Among them, the "PositiveServiceReview" is the most relevant one.
+
+> Using our analysis, we can recommend the 5 most profitable new products, that we think should be added to the Blackwell's product mix:
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE, size="small"}
+
+yyy <- dati_new[c("ProductType","ProductNum","Price","x4StarReviews","PositiveServiceReview","ProfitMargin","Volume")]
+yyy$TotProfit <- round(yyy$Volume*yyy$ProfitMargin*yyy$Price,0)
+yyy$Volume <- round(yyy$Volume,0)
+y <- yyy[order(-yyy$TotProfit),]
+kable(y[1:5,])
+
+```
+
+> Among the products "Laptop","PC","Netbook","Smartphone", we can recommend the 5 most profitable new products, that we think should be added to the Blackwell's product mix:
+
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+
+nnn<- dati_new[dati_new$ProductType %in% c("Laptop","PC","Netbook","Smartphone"),c("ProductType","ProductNum","Price","x4StarReviews","PositiveServiceReview","ProfitMargin","Volume")]
+nnn$TotProfit <- round(nnn$Volume*nnn$ProfitMargin*nnn$Price,0)
+nnn$Volume <- round(nnn$Volume,0)
+nv <- nnn[order(-nnn$TotProfit),]
+nomi <- c("Acer","Dell","Samsung","Motorola","Dell")
+#nv$ProductNum[1:5] <- nomi
+kable(nv[1:5,])
+
+
+```
+
+> We remark that our recommandations are not taking into account the possible competition between items of the same category, once we put them on the market. This issue should be taken into account.
+
+
+
+
+
+
+
+
+
+
+
+
+
