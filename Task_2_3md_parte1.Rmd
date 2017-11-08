@@ -1,0 +1,281 @@
+---
+title: "Predict profitability of new products"
+author: "Vera Giulia Sala - Ubiqum Code Academy"
+subtitle: A case study for understanding regression models
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+```{r}
+# load ggplot2 silently
+suppressWarnings(library(ggplot2))
+# chunk option dev="svg" produces very large vector graphics files
+#knitr::opts_chunk$set(dev="svg")
+# chunk option dev="png" is the default raster graphics format for HTML output
+knitr::opts_chunk$set(dev="png")
+```
+
+******
+# Goal of the analysis
+******
+
+The sales team of Blackwell Electronics is considering adding some new products to Blackwell's product mix. They have shortlisted 17 that fit Blackwell's business strategy, but now they need help narrowing the list down to five, corresponding to the highest profitable ones. To that end, the goal of the analysis is to build a predictive model, based on the data of the products that are already on the market, that determines the profitabiliy of a product based on a certain number of product attributes. That model will be used to predict the profitability of new products and determine the most rentable one.   
+The sales team is also interested in how specific product types perform against each other, i.e. if some product types are more likely to have a higher volume of sales (especially among PC, Laptops, Netbooks and Smartphones). 
+
+******
+# Dataset
+******
+
+The "existing products" dataset contains the existing Blackwell product mix, consisting of 80 products. For each product 18 features are recorded:
+
+- Product ID: 'ProductNum'
+
+- Product type: 'ProductType'
+
+- Quality attributes: 'x5StarReviews', 'x4StarReviews', 'x3StarReviews', 'x2StarReviews' 'x1StarReviews',   'PositiveServiceReview', 'NegativeServiceReview', 'Wouldconsumerrecommendproduct', 'BestSellersRank'
+
+- Physical attributes: 'ShippingWeight', 'ProductDepth', 'ProductWidth', 'ProductHeight'
+
+- Profit margin: 'Profitmargin'
+
+- Volume of sales: 'Volume'
+
+The "new products" dataset contains 24 new products, for which we want to predict the volume of sales.
+
+
+
+******
+# Preprocessing and exploratory analysis of data
+******
+
+We perform a first exploration of the existing and new products datasets. We check the data quality (missing values, repeated rows), check the distribution of data and remove ouliers. 
+
+******
+## First exploration of data
+******
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+library(reshape2)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(dplyr)
+library(knitr)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- read.csv("existingproductattributes2017.csv")
+dati_new <- read.csv("newproductattributes2017.csv")
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+str(dati_ex)
+```
+```{r,eval=FALSE,echo=TRUE, warning=FALSE, message=FALSE, dpi=90}
+a <- as.data.frame(table(dati_ex$ProductType))
+b <- as.data.frame(table(dati_new$ProductType))
+ggplot(a,aes(x=Var1,y=Freq))+geom_col(fill="gray")+geom_col(data=b,aes(x=Var1,y=Freq),fill="red",alpha=0.5)+ theme(axis.text.x=element_text(angle=60,hjust=1)) + xlab("")+
+geom_rect(xmin=8, xmax=8.3, ymin=20, ymax=21, color="red",fill="red",alpha=0.5)+
+geom_rect(xmin=8, xmax=8.3, ymin=18, ymax=19, color="gray",fill="gray",alpha=0.5)+
+annotate("text", x = 9.5, y = 20.6, label = "New products")+
+annotate("text", x = 9.5, y = 18.6, label = "Ex. products")
+
+```
+
+
+******
+## Missing values: remove BestSellersRank attribute
+******
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(paste("The number of NAs in the existing dataset is ", (sum(is.na(dati_ex)))))
+print(paste("NAs from the BestSellerRank attribute", (sum(is.na(dati_ex$BestSellersRank)))))
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- dati_ex[colnames(dati_ex) != "BestSellersRank"]
+dati_new <- dati_new[colnames(dati_new) != "BestSellersRank"]
+```
+
+******
+## Outliers
+******
+We use histograms and scatter plots to identify and remove outliers.
+
+```{r,eval=TRUE,echo=FALSE, warning=FALSE, message=FALSE}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+
+```{r,eval=FALSE,echo=TRUE, warning=FALSE, message=FALSE, fig.height = 4, fig.width = 10, dpi=90}
+options(repr.plot.width=15, repr.plot.height=3)
+p1 <- ggplot(dati_ex,aes(x=Volume))+ geom_histogram()
+p2 <- ggplot(dati_ex, aes(x=x4StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+           geom_point(data=dati_ex[which(dati_ex$Volume > 6000),],col="blue",size=3)+ geom_point(data=dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews > 40),],col="blue",size=3)+ggtitle("With outliers")
+p3 <- ggplot(dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews < 40),], aes(x=x4StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+ggtitle("Outliers removed")
+multiplot(p1, p2, p3, cols=3)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+outliers <- dati_ex[which(dati_ex$Volume > 6000 | dati_ex$x2StarReviews > 40 | dati_ex$NegativeServiceReview > 40 | dati_ex$PositiveServiceReview >200),]
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dati_ex <- dati_ex[which(dati_ex$Volume < 6000 & dati_ex$x2StarReviews < 40 & dati_ex$NegativeServiceReview < 40 & dati_ex$PositiveServiceReview <200),]
+
+```
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+dim(dati_ex)
+```
+
+******
+## Attributes type: categorical to dummy variables
+******
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+newDataframe <- dummyVars(" ~ .", data = dati_ex)
+dati_ex_d <- data.frame(predict(newDataframe, newdata = dati_ex))
+
+```
+
+******
+# Feature Selection
+******
+
+We use feature selection to determine the set of variables that are more relevant for volume prediction. This process follows three steps:
+
+- elimination of "bad" features
+- elimination of collinear features
+- feature selection using random forest prediction (feature importance)
+
+
+
+******
+## Removing "bad" features: x5StarReviews
+******
+
+From the features correlation matrix, we find that "x5StarReviews" is 100% correlated with the volume (the dependent variable we are trying to predict). The explicit linear relation is shown in the linear model below.
+We deduce that there has been an error in the data recollection. We eliminate the "x5StarReviews" variable.
+
+
+```{r,eval=FALSE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 8, fig.align="left", dpi=36, out.width="600px", out.height="600px"}
+options(repr.plot.width=10, repr.plot.height=10)
+M <- cor(dati_ex_d[!(names(dati_ex_d) %in% c("ProductType"))])
+corrplot(M, method="ellipse",order="hclust",tl.cex=0.5)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide"}
+linmod5 <- lm(Volume ~ x5StarReviews, dati_ex_d)
+
+```
+
+
+
+```{r ,eval=FALSE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 3, fig.width = 5, fig.align="left", dpi=80}
+
+linmod5 <- lm(Volume ~ x5StarReviews, dati_ex_d)
+ggplot(dati_ex_d, aes(x=x5StarReviews, y=Volume))+geom_smooth(method='lm',formula=y~x, col="red")+ geom_point()+
+annotate("text", x = 150, y = 1700, label = "Volume = 4 * x5StarReviews", col='black')
+        
+```
+
+
+
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide",out.extra='style="float:none;"'}
+dati_ex_d <- dati_ex_d[colnames(dati_ex_d) != "x5StarReviews"]
+
+```
+
+******
+## Remove collinear features
+******
+
+We remove independent variables that are highly collinear, i.e.  having a high correlation coefficient. Specifically, "x3StarReviews" is highly correlated with "x4StarReviews". We remove "x3StarReviews", being the variable with the lowest correlation with the dependent variable (Volume).
+
+
+```{r, eval=FALSE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 8, fig.align="left", dpi=90}
+M <- cor(dati_ex[!(names(dati_ex) %in% c("ProductType","ProductNum","x5StarReviews"))])
+corrplot(M, method="number",order="hclust",tl.cex=0.5,number.cex=0.7)
+
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results="hide",out.extra='style="float:none;"'}
+dati_ex_d <- dati_ex_d[colnames(dati_ex_d) != "x3StarReviews"]
+
+```
+
+******
+## Feature selection with random forest
+******
+
+We train a random forest model on the full dataset (all features included). From the variables importance given as an output from the model, we determine the most relevant features. 
+
+> just two variables are relevant: x4StarReviews, PositiveServiceReview
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE, results='hide'}
+t <- proc.time() 
+set.seed(400)
+ctrl <- trainControl(method="cv",number=3, repeats = 3) 
+modrf <- train(Volume ~ ., dati_ex_d[names(dati_ex_d) != "ProductNum"], method = "rf", trControl = ctrl, tuneLength =10) 
+proc.time()-t
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE}
+print(modrf)
+```
+
+```{r,eval=TRUE,echo=TRUE, warning=FALSE, message=FALSE,fig.height = 5, fig.width = 8, dpi=90}
+varImpPlot(modrf$finalModel, main="Variables Importance")
+```
+
+> From our analysis we see that we can use just two variables (x4StarReviews, PositiveServiceReview) for volume prediction. The product type seems irrelevant for the prediction.
+
