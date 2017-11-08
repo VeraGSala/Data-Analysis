@@ -1,15 +1,9 @@
 ---
 title: "Predict customer product preferences"
-subtitle: "A case study for understanding classification decision boundaries"
 author: "Vera Giulia Sala - Ubiqum Code Academy"
+subtitle: A case study for understanding classification decision boundaries
+output: rmarkdown::github_document
 
-output: 
-  html_document:
-    highlight: default
-    number_sections: yes
-    theme: cosmo
-    toc: yes
-    toc_depth: 2
 ---
 
 ******
