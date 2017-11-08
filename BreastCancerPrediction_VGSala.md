@@ -291,7 +291,7 @@ fig.savefig("class_distr.png")
 ```
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_13_0.png)
+![png](BreastCancerPrediction_VGSala_files/output13_0.png)
 
 
 
@@ -315,7 +315,7 @@ aaa.save("bm.pdf", width=15, height=15)
     
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_14_2.png)
+![png](BreastCancerPrediction_VGSala_files/output14_2.png)
 
 
 **Standardize data**
@@ -357,7 +357,7 @@ plt.xticks(rotation=90)
 
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_19_1.png)
+![png](BreastCancerPrediction_VGSala_files/output19_1.png)
 
 
 # <a id="p4">Feature selection</a>
@@ -383,7 +383,7 @@ c2.plot(fig=yyy)
     
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_24_1.png)
+![png](BreastCancerPrediction_VGSala_files/output24_1.png)
 
 
 
@@ -398,7 +398,7 @@ plt.show()
 ```
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_25_0.png)
+![png](BreastCancerPrediction_VGSala_files/output25_0.png)
 
 
 
@@ -1493,7 +1493,7 @@ plt.show()
 ```
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_78_0.png)
+![png](BreastCancerPrediction_VGSala_files/output78_0.png)
 
 
 **PCA with 3 components **
@@ -1589,15 +1589,15 @@ plt.show()
     
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_86_1.png)
+![png](BreastCancerPrediction_VGSala_files/output86_1.png)
 
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_86_2.png)
+![png](BreastCancerPrediction_VGSala_files/output86_2.png)
 
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_86_3.png)
+![png](BreastCancerPrediction_VGSala_files/output86_3.png)
 
 
 
@@ -1618,7 +1618,7 @@ plt.show()
     
 
 
-![png](BreastCancerPrediction_VGSala_filesoutput_87_1.png)
+![png](BreastCancerPrediction_VGSala_files/output87_1.png)
 
 
 # <a id="p7">Conclusions</a>
