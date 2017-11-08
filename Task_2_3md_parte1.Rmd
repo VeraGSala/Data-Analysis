@@ -1,4 +1,4 @@
----
+notedown input.Rmd --knit > output.ipynb---
 title: "Predict profitability of new products"
 author: "Vera Giulia Sala - Ubiqum Code Academy"
 subtitle: A case study for understanding regression models
