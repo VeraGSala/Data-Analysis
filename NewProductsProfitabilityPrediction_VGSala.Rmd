@@ -3,13 +3,7 @@ title: "Predict profitability of new products"
 subtitle: "A case study for understanding regression models"
 author: "Vera Giulia Sala - Ubiqum Code Academy"
 
-output: 
-  html_document:
-    highlight: default
-    number_sections: yes
-    theme: cosmo
-    toc: yes
-    toc_depth: 2
+output: rmarkdown::github_document
 ---
 
 ******
