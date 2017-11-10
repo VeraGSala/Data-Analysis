@@ -40,7 +40,7 @@ The 529 features correspond to:
 The WAP intensity values are represented as negative integer values ranging -104dBm (extremely poor signal) to 0dbM. The positive value 100 is used to denote when a WAP was not detected.
 
 
-<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/CampusImg.png" width="400" align="left"/>  
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/CampusImg.png" width="400" style="float: right;"/>  
 
 
 
