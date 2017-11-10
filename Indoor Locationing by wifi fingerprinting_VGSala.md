@@ -208,7 +208,7 @@ multiplot(p1,p2, cols = 2)
 ```
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_30_0.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_30_0.png)
 
 
 
@@ -227,7 +227,7 @@ ggplot(dati_w,aes(x=horiz,y=vert,col=WAP041))+geom_point()+scale_colour_gradient
 
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_33_1.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_33_1.png)
 
 
 **We check how the signal of WAP041 is distributed on the four floors **
@@ -250,7 +250,7 @@ scale_colour_gradientn(colours=c(adjustcolor( "gray", alpha.f = 1),"red","#5F021
 
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_37_1.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_37_1.png)
 
 
 **Distribution of intensity values **
@@ -291,7 +291,7 @@ multiplot(pp1,pp2, cols = 2)
 ```
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_42_0.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_42_0.png)
 
 
 ## <a id="p4_3">Removing outliers</a>
@@ -314,7 +314,7 @@ scale_colour_gradientn(colours=c(adjustcolor( "gray", alpha.f = 1),"red","#5F021
 
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_46_1.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_46_1.png)
 
 
 
@@ -343,7 +343,7 @@ multiplot(pp1,pp2, cols = 2)
 ```
 
 
-![](Indoor Locationing by wifi fingerprinting_VGSala_files/output_48_0.png)
+![](Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/output_48_0.png)
 
 
 
