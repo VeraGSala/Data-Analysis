@@ -40,7 +40,7 @@ The 529 features correspond to:
 The WAP intensity values are represented as negative integer values ranging -104dBm (extremely poor signal) to 0dbM. The positive value 100 is used to denote when a WAP was not detected.
 
 
-<img src="CampusImg.png" style="width: 400px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/CampusImg.png" style="width: 400px;" align="left"/>
 
 
 
@@ -374,7 +374,7 @@ dati[,c(1:465)] <- dati[,c(1:465)] %>% apply(2,function(x) ifelse(x > -20 , -100
 
 We try different preprocess strategies and for each preprocessing we train different models for zone prediction.
 
-<img src="01_preprocess.png" style="width: 400px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/01_preprocess.png" style="width: 400px;" align="left"/>
 
 **Preprocess 3: normalized signals **
 
@@ -600,7 +600,7 @@ C50Fit
 
 **Summary of all the trained models performance**
 
-<img src="02_modelszone1.png" style="width: 400px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/02_modelszone1.png" style="width: 400px;" align="left"/>
 
 <big> **Validation of the selected model: training on the full train set, validation on test set ** </big>
 
@@ -666,18 +666,18 @@ We use the same workflow used for "zone" prediction, to predict location coordin
 
 **1 - Model selection (10- fold cross-validation, x20 for best model parameters selection) on a 10% subset of the trainig set (1595 instances)**
 
-<img src="02_modelszone2.png" style="width: 400px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/02_modelszone2.png" style="width: 400px;" align="left"/>
 
 ** 2 - Validation of the selected models: training on the full train set, validation on test set **
 
-<img src="02_modelszone2bis.png" style="width: 400px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/02_modelszone2bis.png" style="width: 400px;" align="left"/>
 
 We observe that k-nn performs better in terms of MAE (mean absolute error), while random forest performs better in terms of RMSE (root mean squared error). From the distribution of errors we see that k-nn tends to produce lowers errors in general, but few very high errors, that amplify the RMSE metric. Random forest produces slightly higher errors in general, but fewer "extreme" errors.
 
-<img src="02_errors.png" style="width: 800px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/02_errors.png" style="width: 800px;" align="left"/>
 
 ## <a id="p7">Conclusion</a>
 
 > ** We are able to predict indoor location of a user based on wifi fingerprint with a quite good accuracy. We predict building with 100% accuracy and floor with 99.9% accuracy. We can predict the location coordinates with a range of error of about 9m for the horizontal coordinate and 6m for the vertical coordinate.**
 
-<img src="02_conclusion.png" style="width: 600px;" align="left"/>
+<img src="Indoor_Locationing_by_wifi_fingerprinting_VGSala_files/02_conclusion.png" style="width: 600px;" align="left"/>
